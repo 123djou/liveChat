@@ -4,12 +4,24 @@ Imports System.Data.SqlClient
 Partial Class ws_www_p_livechat_users
     Inherits System.Web.UI.Page
 
-
+    Public Shared Function getCount(ByVal id As String) As Integer
+        Dim i As Integer
+        Dim db As New DB()
+        Dim sql As String = "select count(*) from website__Messages where ConversationId = '" + id + "'"
+        db.Connection_On()
+        db.Execute_Sql(sql, "Reader")
+        While db.SdrData.Read()
+            i = db.SdrData(0)
+        End While
+        db.Connection_Off()
+        Return i
+    End Function
 
     <System.Web.Services.WebMethod()> _
-    Public Shared Function getAll(ByVal dateNow As String) As List(Of Message)
+    Public Shared Function getAll(ByVal count As Integer) As List(Of Message)
         Dim conv As New conversation()
         Dim user As String = ""
+
 
 
         If HttpContext.Current.Request.Cookies("client") Is Nothing Then
@@ -25,14 +37,19 @@ Partial Class ws_www_p_livechat_users
         If conv.isExist(user) = True Then
 
 
-
             conv = conv.getConv(user)
 
-            Dim sql As String = "select * from website__Messages "
+            Dim i As Integer = getCount(conv.id) - count
+            Dim ord As String = ""
+            If (count <> 0) Then
+                ord = "desc"
+            End If
+
+            Dim sql As String = "select top " & i & " * from website__Messages "
 
             sql += "where ConversationID = '" & conv.id & " '"
 
-            sql += "and date > '" & dateNow & "' order by date ASC "
+            sql += " order by date " & ord
 
             Dim db As New DB()
 
@@ -41,20 +58,15 @@ Partial Class ws_www_p_livechat_users
             db.Execute_Sql(sql, "Reader")
 
             While db.SdrData.Read()
-
                 Dim msg As New Message()
-
                 msg.id = db.SdrData(0).ToString()
                 msg.msg = db.SdrData("Message")
                 msg.time = db.SdrData("date") & "." & db.SdrData("date").Millisecond
-
                 msg.dist = db.SdrData("Distination")
                 msg.source = db.SdrData("Source")
                 msgList.Add(msg)
 
             End While
-
-            db.Connection_Off()
 
         End If
 
@@ -71,23 +83,16 @@ Partial Class ws_www_p_livechat_users
 
 
         user = HttpContext.Current.Request.ServerVariables("HTTP_X_FORWARDED_FOR")
-
         If user = "" Then
-
             user = HttpContext.Current.Request.ServerVariables("REMOTE_ADDR")
-
         End If
-
         If HttpContext.Current.Request.Cookies("client") Is Nothing Then
 
             Dim myCookie As HttpCookie = New HttpCookie("client")
-
             myCookie.Value = user
-
             HttpContext.Current.Response.Cookies.Add(myCookie)
 
         Else
-
             If user <> HttpContext.Current.Request.Cookies("client").Value Then
 
                 UpdateClient(HttpContext.Current.Request.Cookies("client").Value, user)
@@ -95,15 +100,13 @@ Partial Class ws_www_p_livechat_users
             End If
 
 
-        End If
 
+        End If
         user = HttpContext.Current.Request.Cookies("client").Value
 
 
         If conv.isExist(user) = False Then
-
             conv.Create(user)
-
         End If
 
         conv = conv.getConv(user)
@@ -129,27 +132,16 @@ Partial Class ws_www_p_livechat_users
         Dim sql As String = "UPDATE website__Messages SET Source = '" & Newuser & "' where Source = '" & Olduser & "'"
 
         db.Connection_On()
-
         db.Execute_Sql(sql, "Scalar")
 
-        db.Connection_Off()
-
         sql = "UPDATE Conversation SET  website__Messages SET Distination = '" & Newuser & "' where Distination = '" & Olduser & "'"
-
         db.Connection_On()
-
         db.Execute_Sql(sql, "Scalar")
 
 
         sql = "UPDATE Conversations SET Client = '" & Newuser & "' where Client = '" & Olduser & "'"
-
-        db.Connection_Off()
-
         db.Connection_On()
-
         db.Execute_Sql(sql, "Scalar")
-
-        db.Connection_Off()
 
 
     End Sub
@@ -172,7 +164,7 @@ Partial Class ws_www_p_livechat_users
 
             db.Execute_Sql(sql, "Scalar")
 
-            db.Connection_Off()
+
 
         End Sub
 
@@ -204,8 +196,6 @@ Partial Class ws_www_p_livechat_users
                 list.Add(msg)
 
             End While
-
-            db.Connection_Off()
 
             Return list
 
@@ -241,8 +231,6 @@ Partial Class ws_www_p_livechat_users
 
             End While
 
-            db.Connection_Off()
-
             Return exist
 
         End Function
@@ -256,12 +244,11 @@ Partial Class ws_www_p_livechat_users
 
             db.Execute_Sql(sql, "Scalar")
 
-            db.Connection_Off()
+
 
         End Sub
 
         Public Function getConv(ByVal user As String) As conversation
-
             Dim conv As New conversation
 
             Dim db As New DB()
@@ -280,10 +267,8 @@ Partial Class ws_www_p_livechat_users
                 conv.admin = db.SdrData(1).ToString()
                 conv.client = db.SdrData(2).ToString()
                 conv.is_Read = db.SdrData(3)
-
             End While
 
-            db.Connection_Off()
 
             Return conv
 
@@ -318,10 +303,8 @@ Partial Class ws_www_p_livechat_users
 
             End While
 
-            db.Connection_Off()
 
             Return list
-
         End Function
 
         Public Function getLastMsg(ByVal conv As String) As Message
@@ -342,12 +325,11 @@ Partial Class ws_www_p_livechat_users
 
 
                 msg.msg = db.SdrData("Message").ToString()
-
                 msg.time = db.SdrData("Date")
 
             End While
 
-            db.Connection_Off()
+
 
             Return msg
 
@@ -365,9 +347,7 @@ Partial Class ws_www_p_livechat_users
             db.Connection_On()
 
             db.Execute_Sql("select * from Conversations where ID = '" & id & "'", "Reader")
-
             While db.SdrData.Read()
-
                 conv.id = db.SdrData(0).ToString()
                 conv.admin = db.SdrData(1)
                 conv.client = db.SdrData(2)
@@ -375,7 +355,6 @@ Partial Class ws_www_p_livechat_users
 
             End While
 
-            db.Connection_Off()
 
             Return conv
 
@@ -383,6 +362,95 @@ Partial Class ws_www_p_livechat_users
 
     End Class
 
+    Public Class DB1
+
+        Public Property ConnectionString() As String
+            Get
+                Return _ConnectionString
+            End Get
+            Set(ByVal ConnectionString As String)
+                _ConnectionString = ConnectionString
+            End Set
+        End Property
+        Private _ConnectionString As String
+
+        Dim Sql As String
+        Dim Sqlconn As New SqlConnection
+        Dim SqlCmd As New SqlCommand
+        Public SdrData As SqlDataReader
+
+
+        Public Sub New()
+
+
+            _ConnectionString = "Data Source=WIN-Q77N0RVDTMS;Initial Catalog=DB__sp1__002----jn____d9-F0@;"
+            _ConnectionString += "User ID=w@__jn__user1; Password=d@Vze5f5.ze_wx6@kj;"
+
+            _ConnectionString += "pooling=false;connect timeout=900;"
+
+
+        End Sub
+
+
+        Sub Connection_On()
+
+            Sqlconn.ConnectionString = _ConnectionString
+
+            If Sqlconn.State = ConnectionState.Closed Then
+                Sqlconn.Open()
+            End If
+            SqlCmd.CommandTimeout = 0
+            SqlCmd.Connection = Sqlconn
+
+        End Sub
+
+        Sub Connection_Off()
+
+
+
+            If Sqlconn.State = ConnectionState.Open Then
+                Sqlconn.Close()
+                Sqlconn.Dispose()
+            End If
+
+            SqlCmd.Dispose()
+
+            Sql = Nothing
+
+        End Sub
+
+
+        Sub Execute_Sql(ByVal Sql As String, ByVal Reader_or_Scalar As String)
+
+            SqlCmd.CommandText = Sql
+
+            SqlCmd.CommandType = CommandType.Text
+
+            If Reader_or_Scalar = "Reader" Then
+
+                SdrData = SqlCmd.ExecuteReader()
+
+            ElseIf Reader_or_Scalar = "Scalar" Then
+
+                SdrData = SqlCmd.ExecuteScalar()
+
+            End If
+
+        End Sub
+
+        Protected Overrides Sub Finalize()
+
+
+            Sql = Nothing
+            Sqlconn = Nothing
+            SqlCmd = Nothing
+            SdrData = Nothing
+
+            MyBase.Finalize()
+
+        End Sub
+
+    End Class
 
 
 End Class

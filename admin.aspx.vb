@@ -4,102 +4,61 @@ Imports System.Data
 Partial Class ws_www_p_livechat_admin
     Inherits System.Web.UI.Page
 
+    Class info
+        Public conv As New conversation()
+        Public txt As String = ""
+        Public time As String = ""
+    End Class
 
-
-    Protected Sub Page_Load(sender As Object, e As EventArgs) Handles Me.Load
-
-        Dim list As New List(Of conversation)
+    <System.Web.Services.WebMethod()> _
+    Public Shared Function InitConv(ByVal count As Integer) As List(Of info)
+        Dim convList As New List(Of info)
 
         Dim conv As New conversation()
+        Dim msg As New Message()
 
+        Dim c As Integer = conv.Count() - count
 
-        list = conv.getAll()
+        For Each x In conv.getAll(c)
 
-        For Each v In list
+            Dim inf As New info()
+            inf.conv.admin = x.admin
+            inf.conv.client = x.client
+            inf.conv.id = x.id
 
-            Dim tr As New HtmlTableRow
-            Dim td, td1, td2 As New HtmlTableCell
+            inf.txt = x.getLastMsg(x.id).msg
+            inf.time = x.getLastMsg(x.id).time
+            convList.Add(inf)
 
-            Dim label, label1, label2 As New Label
-
-            Dim msg As New Message()
-
-            msg = v.getLastMsg(v.id)
-
-            label.Text = v.client
-
-            If msg.msg.Length > 20 Then
-
-                label1.Text = msg.msg.Substring(0, 15) & "..."
-
-            Else
-
-                label1.Text = msg.msg
-            End If
-
-            label2.Text = msg.time
-
-            label.CssClass = "client"
-            label1.CssClass = "msg"
-
-            label2.CssClass = "time"
-
-
-            td.Controls.Add(label)
-            td1.Controls.Add(label1)
-            td2.Controls.Add(label2)
-            td2.Align = "right"
-
-            tr.Attributes.Add("onclick", "getConv(this)")
-            tr.ID = v.id
-
-            tr.Cells.Add(td)
-            tr.Cells.Add(td1)
-            tr.Cells.Add(td2)
-
-            ConvList.Rows.Add(tr)
 
         Next
 
 
-    End Sub
 
-    <System.Web.Services.WebMethod()> _
-    Public Shared Function getAll(ByVal dateNow As String, ByVal convID As String) As List(Of Message)
-
-        Dim msgList As New List(Of Message)
-
-        Dim sql As String = "select * from website__Messages "
-
-        sql += "where ConversationID = '" & convID & " '"
-
-        sql += "and date > '" & dateNow & "' order by date ASC "
-
-        Dim DB As New DB()
-
-        db.Connection_On()
-
-        db.Execute_Sql(sql, "Reader")
-
-        While db.SdrData.Read()
-            Dim msg As New Message()
-            msg.id = db.SdrData(0).ToString()
-            msg.msg = db.SdrData("Message")
-            msg.time = db.SdrData("date") & "." & db.SdrData("date").Millisecond
-            msg.dist = db.SdrData("Distination")
-            msg.source = db.SdrData("Source")
-            msgList.Add(msg)
-
-        End While
-
-        db.Connection_Off()
+        Return convList
 
 
-        Return msgList
     End Function
 
+
+
+    Public Shared Function getCount(ByVal id As String) As Integer
+        Dim i As Integer
+        Dim db As New DB()
+        Dim sql As String = "select count(*) from website__Messages where ConversationId = '" + id + "'"
+        db.Connection_On()
+        db.Execute_Sql(sql, "Reader")
+        While db.SdrData.Read()
+            i = db.SdrData(0)
+        End While
+        db.Connection_Off()
+        Return i
+    End Function
+
+
+
     <System.Web.Services.WebMethod()> _
-    Public Shared Function getMesages(ByVal id As String) As List(Of Message)
+    Public Shared Function getMesages(ByVal id As String, ByVal count As Integer) As List(Of Message)
 
 
 
@@ -107,7 +66,7 @@ Partial Class ws_www_p_livechat_admin
 
         Dim msg As New Message()
 
-        msgList = msg.getMsg(id)
+        msgList = msg.getMsg(id, count)
 
         Return msgList
 
@@ -148,7 +107,7 @@ Partial Class ws_www_p_livechat_admin
 
         Public Sub send(ByVal msg As String, ByVal conv As String, ByVal dist As String, ByVal Source As String)
 
-            Dim DB As New DB()
+            Dim db As New DB()
 
             Dim sql As String = "insert into website__Messages(Message,ConversationID,Distination,Source)VALUES('" & msg & "','" & conv & "','" & dist & "','" & Source & "' )"
 
@@ -156,20 +115,27 @@ Partial Class ws_www_p_livechat_admin
 
             db.Execute_Sql(sql, "Scalar")
 
-            db.Connection_Off()
+
 
         End Sub
 
-        Public Function getMsg(ByVal conv As String) As List(Of Message)
+        Public Function getMsg(ByVal conv As String, c As Integer) As List(Of Message)
 
             Dim list As New List(Of Message)
 
+            Dim i = getCount(conv) - c
 
-            Dim DB As New DB()
+            Dim db As New DB()
 
             Dim sql As String = ""
+            Dim ord As String = ""
+            If (c <> 0) Then
+                ord = "desc"
+            End If
 
-            sql = "select * from website__Messages where ConversationID = '" & conv & "' order by date"
+
+            sql = "select top " & i & " * from website__Messages where ConversationID = '" & conv & "' order by date  " & ord
+
 
             db.Connection_On()
 
@@ -189,8 +155,6 @@ Partial Class ws_www_p_livechat_admin
 
             End While
 
-            db.Connection_Off()
-
             Return list
 
         End Function
@@ -204,50 +168,38 @@ Partial Class ws_www_p_livechat_admin
         Public client As String = ""
         Public is_Read As Boolean = False
 
-        Public Function isExist(ByVal user As String) As Boolean
-            Dim exist As Boolean = False
+    
 
-            Dim DB As New DB()
+
+        Public Function Count() As Integer
+
+            Dim i = 0
+
+            Dim sql As String = "select count(*) from Conversations"
+
+            Dim db As New DB()
 
             db.Connection_On()
-
-            Dim sql As String = "select top 1 Client from Conversations where Client= '" & user & "'"
 
             db.Execute_Sql(sql, "Reader")
 
             While db.SdrData.Read()
 
-                If db.SdrData(0) <> Nothing Then
-                    exist = True
-                End If
-
+                i = db.SdrData(0)
 
             End While
 
             db.Connection_Off()
+            Return i
 
-
-            Return exist
 
         End Function
-        Public Sub Create(ByVal admin As String, ByVal client As String)
 
-            Dim DB As New DB()
-
-            db.Connection_On()
-
-            Dim sql As String = "insert into Conversations(Admin,Client,is_Read)VALUES('" & admin & "','" & client & "',0)"
-
-            db.Execute_Sql(sql, "Scalar")
-
-            db.Connection_Off()
-
-        End Sub
 
         Public Function getConv(ByVal user As String) As conversation
             Dim conv As New conversation
 
-            Dim DB As New DB()
+            Dim db As New DB()
 
             Dim sql As String = ""
 
@@ -263,27 +215,31 @@ Partial Class ws_www_p_livechat_admin
                 conv.admin = db.SdrData(1).ToString()
                 conv.client = db.SdrData(2).ToString()
                 conv.is_Read = db.SdrData(3)
-
             End While
 
-            db.Connection_Off()
 
             Return conv
 
         End Function
-        Public Function getAll() As List(Of conversation)
+        Public Function getAll(ByVal c As Integer) As List(Of conversation)
 
             Dim list As New List(Of conversation)
 
 
-            Dim DB As New DB()
+            Dim db As New DB()
 
 
             Dim sql As String = ""
 
             db.Connection_On()
 
-            sql = "select * from Conversations"
+            Dim ord As String = ""
+
+            If (c > 0) Then
+                ord = "DESC"
+            End If
+
+            sql = "select top " & c & " * from Conversations order by ID " & ord
 
 
 
@@ -301,7 +257,6 @@ Partial Class ws_www_p_livechat_admin
 
             End While
 
-            db.Connection_Off()
 
             Return list
         End Function
@@ -310,7 +265,7 @@ Partial Class ws_www_p_livechat_admin
 
             Dim msg As New Message()
 
-            Dim DB As New DB()
+            Dim db As New DB()
 
             Dim sql As String = "select top 1 * from website__Messages "
 
@@ -328,7 +283,7 @@ Partial Class ws_www_p_livechat_admin
 
             End While
 
-            db.Connection_Off()
+
 
             Return msg
 
@@ -338,7 +293,7 @@ Partial Class ws_www_p_livechat_admin
 
             Dim conv As New conversation()
 
-            Dim DB As New DB()
+            Dim db As New DB()
 
             db.Connection_On()
 
@@ -351,7 +306,6 @@ Partial Class ws_www_p_livechat_admin
 
             End While
 
-            db.Connection_Off()
 
             Return conv
 
@@ -360,6 +314,95 @@ Partial Class ws_www_p_livechat_admin
     End Class
 
 
+    Public Class DB1
+
+        Public Property ConnectionString() As String
+            Get
+                Return _ConnectionString
+            End Get
+            Set(ByVal ConnectionString As String)
+                _ConnectionString = ConnectionString
+            End Set
+        End Property
+        Private _ConnectionString As String
+
+        Dim Sql As String
+        Dim Sqlconn As New SqlConnection
+        Dim SqlCmd As New SqlCommand
+        Public SdrData As SqlDataReader
+
+
+        Public Sub New()
+
+
+            _ConnectionString = "Data Source=WIN-Q77N0RVDTMS;Initial Catalog=DB__sp1__002----jn____d9-F0@;"
+            _ConnectionString += "User ID=w@__jn__user1; Password=d@Vze5f5.ze_wx6@kj;"
+
+            _ConnectionString += "pooling=false;connect timeout=900;"
+
+
+        End Sub
+
+
+        Sub Connection_On()
+
+            Sqlconn.ConnectionString = _ConnectionString
+
+            If Sqlconn.State = ConnectionState.Closed Then
+                Sqlconn.Open()
+            End If
+            SqlCmd.CommandTimeout = 0
+            SqlCmd.Connection = Sqlconn
+
+        End Sub
+
+        Sub Connection_Off()
+
+
+
+            If Sqlconn.State = ConnectionState.Open Then
+                Sqlconn.Close()
+                Sqlconn.Dispose()
+            End If
+
+            SqlCmd.Dispose()
+
+            Sql = Nothing
+
+        End Sub
+
+
+        Sub Execute_Sql(ByVal Sql As String, ByVal Reader_or_Scalar As String)
+
+            SqlCmd.CommandText = Sql
+
+            SqlCmd.CommandType = CommandType.Text
+
+            If Reader_or_Scalar = "Reader" Then
+
+                SdrData = SqlCmd.ExecuteReader()
+
+            ElseIf Reader_or_Scalar = "Scalar" Then
+
+                SdrData = SqlCmd.ExecuteScalar()
+
+            End If
+
+        End Sub
+
+        Protected Overrides Sub Finalize()
+
+
+            Sql = Nothing
+            Sqlconn = Nothing
+            SqlCmd = Nothing
+            SdrData = Nothing
+
+            MyBase.Finalize()
+
+        End Sub
+
+    End Class
 
 
 End Class
